@@ -4,6 +4,7 @@ import { ExtLinks, DoiRow, Abstract, HighlightedText } from './PaperMeta';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FilesRow } from './FilesRow';
+import { copyToClipboard } from '../utils/copy-to-clipboard';
 
 interface PaperCardProps {
   paper: Paper;
@@ -48,17 +49,19 @@ export const PaperCard: React.FC<PaperCardProps> = ({
     setIsDeleted(false);
   };
 
-  const handleCopyBibtex = async () => {
+  const handleCopyBibtex = () => {
     setFetchingBibtex(true);
 
     try {
-      const res = await axios.get<{ bibtex: string }>(`${SERVER_HOST}/papers/${paper.id}/bibtex`);
-      navigator.clipboard.writeText(res.data.bibtex);
-      setCopiedBibtex(true);
-      setTimeout(() => setCopiedBibtex(false), 2500);
+      const s = axios
+        .get<{ bibtex: string }>(`${SERVER_HOST}/papers/${paper.id}/bibtex`)
+        .then((res) => res.data.bibtex);
+      copyToClipboard(s);
+      setTimeout(() => setCopiedBibtex(true), 300);
+      setTimeout(() => setCopiedBibtex(false), 1500);
     } catch (err: any) {
       console.error('Error fetching BibTeX:', err);
-      toast.error(`Error saving paper: ${err.response?.data.message || err}`);
+      toast.error(`Error fetching BibTeX: ${err.response?.data.message || err}`);
     } finally {
       setTimeout(() => setFetchingBibtex(false), 500);
     }
