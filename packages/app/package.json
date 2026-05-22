@@ -1,5 +1,5 @@
 {
-  "name": "papervault-front",
+  "name": "@paper-vault/app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,6 +11,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\""
   },
   "dependencies": {
+    "@paper-vault/shared": "*",
     "@types/node": "^25.5.0",
     "axios": "^1.14.0",
     "react": "^18.2.0",

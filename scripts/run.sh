@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# PaperVault - Run both backend and frontend apps
+# PaperVault - Run both server and the front-end app
 
 # Configuration
 REPO_PATH="${PAPERVAULT_PATH:-$(pwd)}"  # Default to current dir, override with env var
 CONFIG_FILE="$HOME/.config/paper-vault/pv.config.json"
-BACKEND_DIR="$REPO_PATH/pv_back"
-FRONTEND_DIR="$REPO_PATH/pv_front"
+BACKEND_DIR="$REPO_PATH/packages/server"
+FRONTEND_DIR="$REPO_PATH/packages/app"
 HEALTH_CHECK_URL="http://localhost:${BACKEND_PORT:-3000}/api/healthcheck"
 HEALTH_CHECK_MAX_ATTEMPTS=30
 HEALTH_CHECK_INTERVAL=1  # seconds
@@ -44,7 +44,7 @@ load_config() {
     fi
 
     print_status "Loading configuration from $CONFIG_FILE"
-    
+
     # Parse JSON and export variables
     while IFS="=" read -r key value; do
         # Remove quotes and export
@@ -68,7 +68,7 @@ check_backend_health() {
     local attempt=1
 
     print_status "Waiting for backend to be ready at $url"
-    
+
     while [ $attempt -le $max_attempts ]; do
         if curl -s -f "$url" > /dev/null 2>&1; then
             print_success "Backend is healthy (attempt $attempt)"
@@ -78,7 +78,7 @@ check_backend_health() {
         sleep $interval
         attempt=$((attempt + 1))
     done
-    
+
     print_error "Backend failed to become healthy after $max_attempts attempts"
     return 1
 }
@@ -95,7 +95,7 @@ start_backend() {
         exit 1
     fi
     print_success "npm install completed"
-    
+
     # Run compile
     print_status "Compiling TypeScript..."
     npm run compile
@@ -104,22 +104,22 @@ start_backend() {
         exit 1
     fi
     print_success "Compilation completed"
-    
+
     # Check if dist/server.js exists
     if [ ! -f "dist/src/server.js" ]; then
         print_error "dist/server.js not found after compilation"
         exit 1
     fi
-    
+
     # Start backend with node
     print_status "Starting backend server..."
-    node dist/src/server.js > /tmp/pv_backend.log 2>&1 &
+    node dist/src/server.js > /tmp/pv-server.log 2>&1 &
     BACKEND_PID=$!
-    print_success "Backend started with PID: $BACKEND_PID" 
+    print_success "Backend started with PID: $BACKEND_PID"
 
     # Wait for backend to be healthy
     if ! check_backend_health "$HEALTH_CHECK_URL" "$HEALTH_CHECK_MAX_ATTEMPTS" "$HEALTH_CHECK_INTERVAL"; then
-        print_error "Backend failed to start. Check logs at /tmp/pv_backend.log"
+        print_error "Backend failed to start. Check logs at /tmp/pv-server.log"
         exit 1
     fi
 }
@@ -127,7 +127,7 @@ start_backend() {
 start_frontend() {
     print_status "Starting frontend from $FRONTEND_DIR..."
     cd "$FRONTEND_DIR"
-    
+
     # Always run npm install
     print_status "Running npm install..."
     npm install
@@ -136,9 +136,9 @@ start_frontend() {
         exit 1
     fi
     print_success "npm install completed"
-    
+
     # Start frontend (in foreground, but we'll manage it)
-    npm run dev -- --port ${FRONTEND_PORT} > /tmp/pv_frontend.log 2>&1 &
+    npm run dev -- --port ${FRONTEND_PORT} > /tmp/pv-app.log 2>&1 &
     FRONTEND_PID=$!
     print_success "Frontend started with PID: $FRONTEND_PID"
 }
@@ -146,7 +146,7 @@ start_frontend() {
 # Function to open URL in default browser (cross-platform)
 open_frontend_url() {
     local url=$1
-    
+
     # Detect OS and use appropriate command
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
@@ -171,19 +171,19 @@ open_frontend_url() {
 # Function to cleanup processes on exit
 cleanup() {
     print_status "Shutting down PaperVault..."
-    
+
     if [ -n "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
         print_status "Stopping backend (PID: $BACKEND_PID)"
         kill $BACKEND_PID 2>/dev/null
         wait $BACKEND_PID 2>/dev/null
     fi
-    
+
     if [ -n "$FRONTEND_PID" ] && kill -0 $FRONTEND_PID 2>/dev/null; then
         print_status "Stopping frontend (PID: $FRONTEND_PID)"
         kill $FRONTEND_PID 2>/dev/null
         wait $FRONTEND_PID 2>/dev/null
     fi
-    
+
     print_success "Shutdown complete"
     exit 0
 }
@@ -194,7 +194,7 @@ trap cleanup SIGINT SIGTERM EXIT
 # Main execution
 main() {
     print_status "Starting PaperVault..."
-    
+
     # Check if jq is installed (needed for JSON parsing)
     if ! command -v jq &> /dev/null; then
         print_error "jq is not installed. Please install it first:"
@@ -204,35 +204,35 @@ main() {
         print_error "  Arch: sudo pacman -Sy jq"
         exit 1
     fi
-    
+
     # Load configuration
     load_config
-    
+
     # Validate required directories
     if [ ! -d "$BACKEND_DIR" ]; then
         print_error "Backend directory not found at $BACKEND_DIR"
         print_error "Please run this script from the PaperVault repository root"
         exit 1
     fi
-    
+
     if [ ! -d "$FRONTEND_DIR" ]; then
         print_error "Frontend directory not found at $FRONTEND_DIR"
         print_error "Please run this script from the PaperVault repository root"
         exit 1
     fi
-    
+
     print_status "Using backend port: $BACKEND_PORT"
     print_status "Using frontend port: $FRONTEND_PORT"
-    
+
     # Update health check URL with actual port
     HEALTH_CHECK_URL="http://localhost:${BACKEND_PORT}/api/healthcheck"
-    
+
     # Start backend
     start_backend
 
     # Start frontend
     start_frontend
-    
+
     # Open frontend in default browser
     print_status "Opening frontend in default browser..."
     sleep 2  # Give frontend a moment to start
@@ -243,11 +243,11 @@ main() {
     echo ""
     echo "  Backend:  http://localhost:${BACKEND_PORT}"
     echo "  Frontend: http://localhost:${FRONTEND_PORT}"
-    echo "  Backend logs:  tail -f /tmp/pv_backend.log"
-    echo "  Frontend logs: tail -f /tmp/pv_frontend.log"
+    echo "  Backend logs:  tail -f /tmp/pv-server.log"
+    echo "  Frontend logs: tail -f /tmp/pv-app.log"
     echo ""
     print_status "Press Ctrl+C to stop both applications"
-    
+
     # Wait for both processes
     wait $BACKEND_PID $FRONTEND_PID
 }

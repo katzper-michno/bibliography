@@ -47,7 +47,7 @@ get_script_dir() {
 # Function to create default config file
 create_config() {
     print_status "Checking for existing config file..."
-    
+
     if [ -f "$CONFIG_FILE" ]; then
         print_warning "Config file already exists at $CONFIG_FILE"
         read -p "Do you want to overwrite it? (y/N): " -n 1 -r
@@ -57,10 +57,10 @@ create_config() {
             return 0
         fi
     fi
-    
+
     print_status "Creating config directory: $CONFIG_DIR"
     mkdir -p "$CONFIG_DIR"
-    
+
     print_status "Creating default config file: $CONFIG_FILE"
 
     local repo_path="$1"
@@ -71,10 +71,10 @@ create_config() {
   "FRONTEND_PORT": "5173",
   "OPEN_ALEX_API_KEY": "",
   "SEMANTIC_SCHOLAR_API_KEY": "",
-  "VAULT_PATH": "${repo_path}/vault_example"
+  "VAULT_PATH": "${repo_path}/packages/vault_example"
 }
 EOF
-    
+
     print_success "Default config file created"
     print_status "You can edit the configuration at: $CONFIG_FILE"
 }
@@ -82,24 +82,24 @@ EOF
 # Function to prepare the run script with embedded REPO_PATH
 prepare_run_script() {
     local repo_path="$1"
-    local source_run_script="$repo_path/$RUN_SCRIPT_NAME"
+    local source_run_script="$repo_path/scripts/$RUN_SCRIPT_NAME"
     local temp_dir=$(mktemp -d)
     local temp_run_script="${temp_dir}/pv-run-temp.sh"
-    
+
     print_status "Checking for run script at: $source_run_script"
-    
+
     # Check if run.sh exists
     if [ ! -f "$source_run_script" ]; then
         print_error "run.sh not found in repository root: $source_run_script"
         print_error "Please ensure run.sh exists in the same directory as install.sh"
         exit 1
     fi
-    
+
     print_status "Preparing run script with REPO_PATH=$repo_path"
-    
+
     # Copy the run script to temp location
     cp "$source_run_script" "$temp_run_script"
-    
+
     # Replace or add REPO_PATH at the beginning of the script
     # Check if REPO_PATH is already defined in the script
     if grep -q "^REPO_PATH=" "$temp_run_script"; then
@@ -116,40 +116,42 @@ prepare_run_script() {
 # Main installation process
 main() {
     print_status "Starting PaperVault installation..."
-    
+
     # Get the directory where install.sh is located
     local script_dir=$(get_script_dir)
     print_status "Installation script located at: $script_dir"
-    
+
+    local repo_dir="${script_dir%/*}" # Go one step up.
+
     # Verify this is a PaperVault repository
-    if [ ! -d "$script_dir/pv_back" ] || [ ! -d "$script_dir/pv_front" ]; then
-        print_error "This doesn't appear to be a PaperVault repository root."
-        print_error "Make sure install.sh is in the same directory as pv_back/ and pv_front/"
+    if [ ! -d "$repo_dir/packages/server" ] || [ ! -d "$repo_dir/packages/app" ]; then
+        print_error "This doesn't appear to be a PaperVault repository."
+        print_error "Make sure install.sh is in the scripts/ directory of PaperVault repository."
         print_error "Current directory contents:"
         ls -la "$script_dir"
         exit 1
     fi
-    
-    print_success "Verified PaperVault repository at: $script_dir"
-    
+
+    print_success "Verified PaperVault repository at: $repo_dir"
+
     # Create config file
-    create_config "$script_dir"
-    
+    create_config "$repo_dir"
+
     # Prepare run script with embedded path
-    local temp_run_script=$(prepare_run_script "$script_dir")
-    
+    local temp_run_script=$(prepare_run_script "$repo_dir")
+
     # Move prepared run script to install directory
     print_status "Installing run script to $INSTALL_DIR/$SCRIPT_NAME"
     mkdir -p "$INSTALL_DIR"
     cp "$temp_run_script" "$INSTALL_DIR/$SCRIPT_NAME"
-    
+
     # Make executable
     print_status "Making script executable..."
     chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
-    
+
     # Clean up temp file
     rm -f "$temp_run_script"
-    
+
     print_success "PaperVault has been installed successfully!"
     echo ""
     echo "  Installation location: $INSTALL_DIR/$SCRIPT_NAME"
@@ -159,7 +161,7 @@ main() {
     echo ""
     print_status "You can now run 'pv' from anywhere to start PaperVault"
     echo ""
-    
+
     # Test if installation directory is in PATH
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         print_warning "$INSTALL_DIR is not in your PATH"

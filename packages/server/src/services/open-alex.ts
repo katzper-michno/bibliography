@@ -1,8 +1,7 @@
-import { Paper } from "../types.js";
 import axios from "axios";
-import { VaultService } from "./vault.js";
+import { logger } from "../logger.js";
 
-interface OpenAlexWork {
+export interface OpenAlexWork {
   id: string;
   title: string;
   authorships: { author: { display_name: string } }[];
@@ -24,40 +23,39 @@ interface OpenAlexResponse {
   results: OpenAlexWork[];
 }
 
-function reconstructAbstract(
-  invertedIndex: Record<string, number[]> | null,
-): string {
-  if (!invertedIndex) return "";
+const OPEN_ALEX_BASE_URL = "https://api.openalex.org"
 
-  const words: string[] = [];
-  for (const [word, positions] of Object.entries(invertedIndex)) {
-    for (const pos of positions) {
-      words[pos] = word;
-    }
-  }
-
-  return words.filter(Boolean).join(" ");
-}
-
-export async function searchPapers(query: string): Promise<Paper[]> {
+/**
+ * Calls the Open Alex search API with provided query and returns the results.
+ */
+const searchPapers = async (query: string): Promise<OpenAlexWork[]> => {
   const API_KEY = process.env.OPEN_ALEX_API_KEY;
 
-  const url =
-    "https://api.openalex.org/works?" +
+  const searchUrl =
+    `${OPEN_ALEX_BASE_URL}/works?` +
     `search=${encodeURIComponent(query)}` +
     "&per-page=10" +
     "&include_xpac=true" +
     (API_KEY ? `&api_key=${API_KEY}` : "");
 
-  console.log(`[OpenAlexClient] Sending request with URL: ${url}`);
+  // Log a downstream request.
+  logger.info(`Calling Open Alex with request: ${searchUrl}`)
 
-  const response = await axios.get<OpenAlexResponse>(url, {
-    timeout: 20000,
-  });
+  try {
+    const response = await axios.get<OpenAlexResponse>(searchUrl, {
+      timeout: 20000
+    });
 
-  console.log(`[OpenAlexClient] Obtained ${response.data.meta.count} results`);
+    logger.info(`Successfully obtained ${response.data.results.length} results from Open Alex search.`);
 
-  return response.data.results
+    return response.data.results || [];
+  } catch (error: any) {
+    logger.warn(`Open Alex downstream failed with error: ${error}`);
+
+    return [];
+  }
+
+  /* return response.data.results
     .filter((work: OpenAlexWork) => Boolean(work.doi))
     .map((work: OpenAlexWork) => {
       const venue =
@@ -83,9 +81,29 @@ export async function searchPapers(query: string): Promise<Paper[]> {
           openAlex: work.id,
         },
       };
-    });
+      }); */
+}
+
+/**
+ * Reconstructs the abstract from given OpenAlexWork instance.
+ * The abstract is stored in an inverted index format.
+ */
+const reconstructAbstract = (work: OpenAlexWork): string => {
+  const invertedIndex = work.abstract_inverted_index;
+
+  if (!invertedIndex) return "";
+
+  const words: string[] = [];
+  for (const [word, positions] of Object.entries(invertedIndex)) {
+    for (const pos of positions) {
+      words[pos] = word;
+    }
+  }
+
+  return words.filter(Boolean).join(" ");
 }
 
 export const OpenAlexClient = {
   searchPapers,
+  reconstructAbstract
 };
